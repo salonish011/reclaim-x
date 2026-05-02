@@ -1,0 +1,30 @@
+/* Reset default browser spacing */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+               Roboto, Oxygen, Ubuntu, sans-serif;
+  background: #f0f2f5;
+  color: #1a1a1a;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Make all images behave nicely */
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* Remove default button font */
+button, input, select, textarea {
+  font-family: inherit;
+}
+
+/* Remove default link underlines inside navbars */
+a {
+  text-decoration: none;
+}
