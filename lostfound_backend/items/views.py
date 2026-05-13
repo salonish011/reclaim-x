@@ -2,17 +2,18 @@ from rest_framework import viewsets, permissions, generics
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
-from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.generics import ListAPIView
 from .models import Item, Match
 from .serializers import ItemSerializer, MatchSerializer
 import os
 
+
 # --- YOLO Model (lazy loaded) ---
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_PATH = os.path.join(BASE_DIR, 'ml_models', 'best.pt')
 model = None
+
 
 def get_model():
     global model
@@ -23,6 +24,7 @@ def get_model():
         model = YOLO(MODEL_PATH)
     return model
 
+
 # --- Matching Algorithm ---
 def run_matching(new_item):
     from difflib import SequenceMatcher
@@ -32,33 +34,48 @@ def run_matching(new_item):
 
     if new_item.status == 'found':
         lost_items = Item.objects.filter(status='lost').exclude(user=new_item.user)
+
         for lost in lost_items:
             score = (
                 similarity(new_item.title, lost.title) * 0.5 +
                 similarity(new_item.description, lost.description) * 0.3 +
                 similarity(new_item.location, lost.location) * 0.2
             )
+
             if score >= 30:
-                Match.objects.get_or_create(
+                match, created = Match.objects.get_or_create(
                     lost_item=lost,
                     found_item=new_item,
                     defaults={'score': round(score, 2)}
                 )
 
+                if created:
+                    from chat.models import Conversation
+                    conversation = Conversation.objects.create(item=lost)
+                    conversation.participants.add(lost.user, new_item.user)
+
     elif new_item.status == 'lost':
         found_items = Item.objects.filter(status='found').exclude(user=new_item.user)
+
         for found in found_items:
             score = (
                 similarity(new_item.title, found.title) * 0.5 +
                 similarity(new_item.description, found.description) * 0.3 +
                 similarity(new_item.location, found.location) * 0.2
             )
+
             if score >= 30:
-                Match.objects.get_or_create(
+                match, created = Match.objects.get_or_create(
                     lost_item=new_item,
                     found_item=found,
                     defaults={'score': round(score, 2)}
                 )
+
+                if created:
+                    from chat.models import Conversation
+                    conversation = Conversation.objects.create(item=new_item)
+                    conversation.participants.add(new_item.user, found.user)
+
 
 # --- Item API ---
 class ItemViewSet(viewsets.ModelViewSet):
@@ -73,6 +90,7 @@ class ItemViewSet(viewsets.ModelViewSet):
         item = serializer.save(user=self.request.user)
         run_matching(item)
 
+
 # --- Public Browse ---
 class PublicItemListView(generics.ListAPIView):
     serializer_class = ItemSerializer
@@ -80,6 +98,7 @@ class PublicItemListView(generics.ListAPIView):
 
     def get_queryset(self):
         return Item.objects.all().order_by('-created_at')
+
 
 # --- Match List ---
 class MatchListView(ListAPIView):
@@ -92,6 +111,7 @@ class MatchListView(ListAPIView):
         return Match.objects.filter(
             Q(lost_item__user=user) | Q(found_item__user=user)
         ).order_by('-id')
+
 
 # --- YOLO Prediction API ---
 @api_view(['POST'])
